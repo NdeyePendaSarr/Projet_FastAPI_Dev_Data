@@ -192,3 +192,204 @@ def get_etudiant_par_id(id_etudiant):
     finally:
         cursor.close()
         conn.close()
+def creer_etudiant(data):
+    """
+    Insère un nouvel étudiant dans PostgreSQL.
+    Retourne l'étudiant créé avec son id.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Vérifier que la classe existe
+        cursor.execute(
+            "SELECT id_classe FROM classe WHERE libelle_classe = %s",
+            (data.classe,)
+        )
+        resultat = cursor.fetchone()
+        if resultat is None:
+            raise ValueError(f"Classe '{data.classe}' inexistante")
+        id_classe = resultat[0]
+
+        # Vérifier que le numéro n'existe pas déjà
+        cursor.execute(
+            "SELECT id_etudiant FROM etudiant WHERE numero = %s",
+            (data.numero,)
+        )
+        if cursor.fetchone() is not None:
+            raise ValueError(
+                f"Le numéro '{data.numero}' existe déjà"
+            )
+
+        # Insérer l'étudiant
+        cursor.execute("""
+            INSERT INTO etudiant
+                (code, numero, nom, prenom, date_naissance,
+                 id_classe, est_archive, est_valide, source)
+            VALUES (%s, %s, %s, %s, %s, %s, FALSE, TRUE, 'SAISIE_MANUELLE')
+            RETURNING id_etudiant
+        """, (
+            data.code,
+            data.numero,
+            data.nom,
+            data.prenom,
+            data.date_naissance,
+            id_classe
+        ))
+
+        id_etudiant = cursor.fetchone()[0]
+        conn.commit()
+
+        return get_etudiant_par_id(id_etudiant)
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def modifier_etudiant(id_etudiant, data):
+    """
+    Met à jour uniquement les champs fournis.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Vérifier que l'étudiant existe
+        cursor.execute(
+            "SELECT id_etudiant FROM etudiant WHERE id_etudiant = %s",
+            (id_etudiant,)
+        )
+        if cursor.fetchone() is None:
+            return None
+
+        # Construire dynamiquement la requête UPDATE
+        # On ne met à jour que les champs non-null
+        champs = []
+        valeurs = []
+
+        if data.nom is not None:
+            champs.append("nom = %s")
+            valeurs.append(data.nom)
+
+        if data.prenom is not None:
+            champs.append("prenom = %s")
+            valeurs.append(data.prenom)
+
+        if data.date_naissance is not None:
+            champs.append("date_naissance = %s")
+            valeurs.append(data.date_naissance)
+
+        if data.classe is not None:
+            cursor.execute(
+                "SELECT id_classe FROM classe "
+                "WHERE libelle_classe = %s",
+                (data.classe,)
+            )
+            resultat = cursor.fetchone()
+            if resultat is None:
+                raise ValueError(
+                    f"Classe '{data.classe}' inexistante"
+                )
+            champs.append("id_classe = %s")
+            valeurs.append(resultat[0])
+
+        if not champs:
+            # Rien à modifier
+            return get_etudiant_par_id(id_etudiant)
+
+        valeurs.append(id_etudiant)
+
+        cursor.execute(f"""
+            UPDATE etudiant
+            SET {', '.join(champs)}
+            WHERE id_etudiant = %s
+        """, valeurs)
+
+        conn.commit()
+        return get_etudiant_par_id(id_etudiant)
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def archiver_etudiant(id_etudiant):
+    """
+    Archive logiquement un étudiant.
+    Il reste dans la base mais disparaît des listes.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            "SELECT est_archive FROM etudiant "
+            "WHERE id_etudiant = %s",
+            (id_etudiant,)
+        )
+        ligne = cursor.fetchone()
+
+        if ligne is None:
+            return None, "introuvable"
+        if ligne[0]:
+            return None, "deja_archive"
+
+        cursor.execute("""
+            UPDATE etudiant
+            SET est_archive = TRUE
+            WHERE id_etudiant = %s
+        """, (id_etudiant,))
+
+        conn.commit()
+        return True, "archive"
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def restaurer_etudiant(id_etudiant):
+    """
+    Restaure un étudiant archivé.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            "SELECT est_archive FROM etudiant "
+            "WHERE id_etudiant = %s",
+            (id_etudiant,)
+        )
+        ligne = cursor.fetchone()
+
+        if ligne is None:
+            return None, "introuvable"
+        if not ligne[0]:
+            return None, "pas_archive"
+
+        cursor.execute("""
+            UPDATE etudiant
+            SET est_archive = FALSE
+            WHERE id_etudiant = %s
+        """, (id_etudiant,))
+
+        conn.commit()
+        return True, "restaure"
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()

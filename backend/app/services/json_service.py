@@ -175,3 +175,125 @@ def importer_tout():
 
 if __name__ == "__main__":
     importer_tout()
+def lire_json():
+    """
+    Retourne les données de valides.json sous forme
+    de dictionnaire indexé par numero pour accès rapide.
+    """
+    etudiants = charger_json()
+    return {e['numero']: e for e in etudiants}
+
+
+def importer_selection(numeros: list):
+    """
+    Importe uniquement les étudiants dont le numéro
+    est dans la liste fournie.
+    Retourne un rapport détaillé.
+    """
+    json_data = lire_json()
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    importes = []
+    doublons = []
+    introuvables = []
+
+    try:
+        for numero in numeros:
+            # Vérifier que le numéro existe dans le JSON
+            if numero not in json_data:
+                introuvables.append(numero)
+                continue
+
+            # Vérifier doublon en base
+            cursor.execute(
+                "SELECT id_etudiant FROM etudiant "
+                "WHERE numero = %s",
+                (numero,)
+            )
+            if cursor.fetchone() is not None:
+                doublons.append(numero)
+                continue
+
+            # Insérer l'étudiant
+            etudiant = json_data[numero]
+
+            cursor.execute(
+                "SELECT id_classe FROM classe "
+                "WHERE libelle_classe = %s",
+                (etudiant['classe'],)
+            )
+            resultat_classe = cursor.fetchone()
+            if resultat_classe is None:
+                introuvables.append(numero)
+                continue
+
+            id_classe = resultat_classe[0]
+
+            cursor.execute("""
+                INSERT INTO etudiant
+                    (code, numero, nom, prenom, date_naissance,
+                     id_classe, est_archive, est_valide, source)
+                VALUES (%s, %s, %s, %s, %s, %s,
+                        FALSE, TRUE, 'IMPORT_JSON')
+                RETURNING id_etudiant
+            """, (
+                etudiant['code'],
+                etudiant['numero'],
+                etudiant['nom'],
+                etudiant['prenom'],
+                convertir_date(etudiant['date_naissance']),
+                id_classe
+            ))
+            id_etudiant = cursor.fetchone()[0]
+
+            # Insérer les notes
+            for matiere_nom, donnees in etudiant['notes'].items():
+                cursor.execute(
+                    "SELECT id_matiere FROM matiere "
+                    "WHERE libelle_matiere = %s",
+                    (matiere_nom,)
+                )
+                res_matiere = cursor.fetchone()
+                if res_matiere is None:
+                    continue
+
+                cursor.execute("""
+                    INSERT INTO resultat_matiere
+                        (note_examen, moyenne_matiere,
+                         id_etudiant, id_matiere)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id_resultat
+                """, (
+                    donnees['examen'],
+                    donnees['moyenne'],
+                    id_etudiant,
+                    res_matiere[0]
+                ))
+                id_resultat = cursor.fetchone()[0]
+
+                for note in donnees['devoirs']:
+                    cursor.execute(
+                        "INSERT INTO devoir "
+                        "(note_devoir, id_resultat) "
+                        "VALUES (%s, %s)",
+                        (note, id_resultat)
+                    )
+
+            importes.append(numero)
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+    return {
+        "importes":     importes,
+        "doublons":     doublons,
+        "introuvables": introuvables,
+        "total_importes": len(importes)
+    }

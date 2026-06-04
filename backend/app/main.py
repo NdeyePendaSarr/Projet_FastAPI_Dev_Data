@@ -5,7 +5,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import etudiants, stats
-
+from app.routes import etudiants, stats, import_json
 # Création de l'application FastAPI
 app = FastAPI(
     title="DEV DATA P8 - API",
@@ -27,7 +27,7 @@ app.add_middleware(
 # Enregistrement des routes
 app.include_router(etudiants.router, prefix="/api/v1")
 app.include_router(stats.router,     prefix="/api/v1")
-
+app.include_router(import_json.router, prefix="/api/v1")
 
 @app.get("/api/v1/health")
 def health_check():
