@@ -1,18 +1,20 @@
 // ============================================
-// dashboard.js — Logique du tableau de bord
+// dashboard.js
 // ============================================
 
 const API = 'http://localhost:8000/api/v1';
 
-// Palette de couleurs cohérente
-const COULEURS = [
-    '#2563eb', '#16a34a', '#dc2626', '#d97706',
-    '#7c3aed', '#0891b2', '#be185d', '#65a30d',
-    '#c2410c', '#1d4ed8', '#15803d', '#b91c1c',
-    '#b45309', '#6d28d9', '#0e7490', '#9d174d'
+Chart.defaults.color          = '#64748b';
+Chart.defaults.borderColor    = 'rgba(255,255,255,0.05)';
+Chart.defaults.font.family    = "'DM Sans', sans-serif";
+Chart.defaults.font.size      = 12;
+
+const PALETTE = [
+    '#6366f1','#22d3ee','#10b981','#f59e0b',
+    '#f43f5e','#8b5cf6','#06b6d4','#84cc16',
+    '#fb923c','#e879f9','#34d399','#fbbf24'
 ];
 
-// ── Initialisation ──
 document.addEventListener('DOMContentLoaded', () => {
     chargerTout();
 });
@@ -33,149 +35,170 @@ async function chargerTout() {
         afficherChartTop10(top10);
 
     } catch (err) {
-        console.error('Erreur chargement dashboard', err);
-        document.getElementById('kpi-container').innerHTML =
-            `<p style="color:#dc2626">
-                Erreur de chargement des données
-            </p>`;
+        console.error('Erreur dashboard', err);
     }
 }
-
-// ============================================
-// KPI
-// ============================================
 
 function afficherKPI(data) {
     const kpis = [
         {
             label:  'Total général',
             valeur: data.total_general,
-            couleur: '#2563eb',
-            icone:  '👥'
+            icone:  '👥',
+            color:  '#6366f1',
+            bg:     'rgba(99,102,241,0.1)'
         },
         {
-            label:  'En base (DB)',
+            label:  'Base de données',
             valeur: data.total_db,
-            couleur: '#16a34a',
-            icone:  '🗄️'
+            icone:  '🗄',
+            color:  '#22d3ee',
+            bg:     'rgba(34,211,238,0.1)'
         },
         {
             label:  'Fichier JSON',
             valeur: data.total_json,
-            couleur: '#d97706',
-            icone:  '📄'
+            icone:  '📄',
+            color:  '#f59e0b',
+            bg:     'rgba(245,158,11,0.1)'
         },
         {
             label:  'Actifs',
             valeur: data.total_actifs,
-            couleur: '#0891b2',
-            icone:  '✅'
+            icone:  '✓',
+            color:  '#10b981',
+            bg:     'rgba(16,185,129,0.1)'
         },
         {
             label:  'Archivés',
             valeur: data.total_archives,
-            couleur: '#7c3aed',
-            icone:  '📦'
+            icone:  '📦',
+            color:  '#8b5cf6',
+            bg:     'rgba(139,92,246,0.1)'
         },
         {
             label:  'Valides',
             valeur: data.total_valides,
-            couleur: '#15803d',
-            icone:  '✔️'
+            icone:  '✔',
+            color:  '#10b981',
+            bg:     'rgba(16,185,129,0.1)'
         },
         {
             label:  'Invalides',
             valeur: data.total_invalides,
-            couleur: '#dc2626',
-            icone:  '❌'
+            icone:  '✗',
+            color:  '#ef4444',
+            bg:     'rgba(239,68,68,0.1)'
         }
     ];
 
     document.getElementById('kpi-container').innerHTML =
         kpis.map(k => `
-            <div class="card" style="text-align:center;
-                 border-top:4px solid ${k.couleur};
-                 padding:20px 12px;">
-                <div style="font-size:28px; margin-bottom:6px;">
-                    ${k.icone}
-                </div>
-                <div style="font-size:32px; font-weight:700;
-                            color:${k.couleur};">
-                    ${k.valeur}
-                </div>
-                <div style="font-size:12px; color:#64748b;
-                            margin-top:4px; font-weight:500;">
-                    ${k.label}
-                </div>
+            <div class="kpi-card"
+                 style="--accent-color:${k.color};
+                        --accent-bg:${k.bg}">
+                <div class="kpi-icon">${k.icone}</div>
+                <div class="kpi-value"
+                     style="color:${k.color}">${k.valeur}</div>
+                <div class="kpi-label">${k.label}</div>
             </div>
         `).join('');
 }
 
-// ============================================
-// GRAPHIQUES
-// ============================================
+function chartOpts(extra = {}) {
+    return {
+        responsive: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#1a2235',
+                borderColor:     'rgba(255,255,255,0.1)',
+                borderWidth:     1,
+                titleColor:      '#f1f5f9',
+                bodyColor:       '#94a3b8',
+                padding:         10,
+                cornerRadius:    8
+            }
+        },
+        ...extra
+    };
+}
 
 function afficherChartClasses(classes) {
-    // Filtrer les classes qui ont des étudiants
-    const avecEtudiants = classes.filter(c => c.nb_etudiants > 0);
-
-    new Chart(
-        document.getElementById('chartClasses'), {
+    const data = classes.filter(c => c.nb_etudiants > 0);
+    new Chart(document.getElementById('chartClasses'), {
         type: 'bar',
         data: {
-            labels:   avecEtudiants.map(c => c.libelle_classe),
+            labels:   data.map(c => c.libelle_classe),
             datasets: [{
-                label:           'Nombre d\'étudiants',
-                data:            avecEtudiants.map(c => c.nb_etudiants),
-                backgroundColor: COULEURS,
-                borderRadius:    6
+                data:            data.map(c => c.nb_etudiants),
+                backgroundColor: data.map((_, i) =>
+                    PALETTE[i % PALETTE.length] + '99'
+                ),
+                borderColor:     data.map((_, i) =>
+                    PALETTE[i % PALETTE.length]
+                ),
+                borderWidth:  1,
+                borderRadius: 6,
+                borderSkipped: false
             }]
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { display: false }
-            },
+        options: chartOpts({
             scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    ticks: { color: '#64748b', font: { size: 11 } }
+                },
                 y: {
-                    beginAtZero: true,
-                    ticks: { stepSize: 1 }
+                    grid: { color: 'rgba(255,255,255,0.04)' },
+                    ticks: {
+                        color: '#64748b',
+                        stepSize: 1,
+                        font: { size: 11 }
+                    },
+                    beginAtZero: true
                 }
             }
-        }
+        })
     });
 }
 
 function afficherChartSources(data) {
-    new Chart(
-        document.getElementById('chartSources'), {
+    new Chart(document.getElementById('chartSources'), {
         type: 'doughnut',
         data: {
-            labels: ['PostgreSQL (DB)', 'Fichier JSON'],
+            labels: ['PostgreSQL', 'JSON'],
             datasets: [{
                 data: [data.total_db, data.total_json],
-                backgroundColor: ['#2563eb', '#d97706'],
-                borderWidth: 3,
-                borderColor: '#ffffff'
+                backgroundColor: ['#6366f1', '#f59e0b'],
+                borderColor:     ['#6366f1', '#f59e0b'],
+                borderWidth: 0,
+                hoverOffset: 6
             }]
         },
         options: {
             responsive: true,
+            cutout: '70%',
             plugins: {
                 legend: {
+                    display:  true,
                     position: 'bottom',
-                    labels: { padding: 20 }
+                    labels: {
+                        color:     '#64748b',
+                        padding:   16,
+                        font:      { size: 12 },
+                        usePointStyle: true,
+                        pointStyleWidth: 8
+                    }
                 },
                 tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            const total = data.total_general;
-                            const pct = total > 0
-                                ? ((ctx.raw / total) * 100).toFixed(1)
-                                : 0;
-                            return ` ${ctx.raw} (${pct}%)`;
-                        }
-                    }
+                    backgroundColor: '#1a2235',
+                    borderColor:     'rgba(255,255,255,0.1)',
+                    borderWidth:     1,
+                    titleColor:      '#f1f5f9',
+                    bodyColor:       '#94a3b8',
+                    padding:         10,
+                    cornerRadius:    8
                 }
             }
         }
@@ -183,36 +206,40 @@ function afficherChartSources(data) {
 }
 
 function afficherChartValidite(data) {
-    new Chart(
-        document.getElementById('chartValidite'), {
+    new Chart(document.getElementById('chartValidite'), {
         type: 'pie',
         data: {
             labels: ['Valides', 'Invalides'],
             datasets: [{
                 data: [data.total_valides, data.total_invalides],
-                backgroundColor: ['#16a34a', '#dc2626'],
-                borderWidth: 3,
-                borderColor: '#ffffff'
+                backgroundColor: ['#10b981', '#ef4444'],
+                borderColor:     ['#10b981', '#ef4444'],
+                borderWidth: 0,
+                hoverOffset: 6
             }]
         },
         options: {
             responsive: true,
             plugins: {
                 legend: {
+                    display:  true,
                     position: 'bottom',
-                    labels: { padding: 20 }
+                    labels: {
+                        color:   '#64748b',
+                        padding: 16,
+                        font:    { size: 12 },
+                        usePointStyle:    true,
+                        pointStyleWidth:  8
+                    }
                 },
                 tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            const total = data.total_valides
-                                        + data.total_invalides;
-                            const pct = total > 0
-                                ? ((ctx.raw / total) * 100).toFixed(1)
-                                : 0;
-                            return ` ${ctx.raw} (${pct}%)`;
-                        }
-                    }
+                    backgroundColor: '#1a2235',
+                    borderColor:     'rgba(255,255,255,0.1)',
+                    borderWidth:     1,
+                    titleColor:      '#f1f5f9',
+                    bodyColor:       '#94a3b8',
+                    padding:         10,
+                    cornerRadius:    8
                 }
             }
         }
@@ -220,77 +247,82 @@ function afficherChartValidite(data) {
 }
 
 function afficherChartMoyennes(classes) {
-    const avecMoyenne = classes.filter(c => c.moyenne_classe > 0);
-
-    new Chart(
-        document.getElementById('chartMoyennes'), {
+    const data = classes.filter(c => c.moyenne_classe > 0);
+    new Chart(document.getElementById('chartMoyennes'), {
         type: 'bar',
         data: {
-            labels:   avecMoyenne.map(c => c.libelle_classe),
+            labels:   data.map(c => c.libelle_classe),
             datasets: [{
-                label:           'Moyenne générale',
-                data:            avecMoyenne.map(c => c.moyenne_classe),
-                backgroundColor: avecMoyenne.map(c =>
-                    c.moyenne_classe >= 10 ? '#16a34a' : '#dc2626'
+                data:            data.map(c => c.moyenne_classe),
+                backgroundColor: data.map(c =>
+                    c.moyenne_classe >= 10
+                        ? 'rgba(16,185,129,0.6)'
+                        : 'rgba(239,68,68,0.6)'
                 ),
-                borderRadius: 6
+                borderColor: data.map(c =>
+                    c.moyenne_classe >= 10 ? '#10b981' : '#ef4444'
+                ),
+                borderWidth:   1,
+                borderRadius:  6,
+                borderSkipped: false
             }]
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { display: false }
-            },
+        options: chartOpts({
             scales: {
+                x: {
+                    grid:  { color: 'rgba(255,255,255,0.04)' },
+                    ticks: { color: '#64748b', font: { size: 11 } }
+                },
                 y: {
+                    grid:  { color: 'rgba(255,255,255,0.04)' },
+                    ticks: { color: '#64748b', font: { size: 11 } },
                     beginAtZero: true,
                     max: 20,
-                    ticks: { stepSize: 2 }
+                    suggestedMin: 0
                 }
             }
-        }
+        })
     });
 }
 
 function afficherChartTop10(top10) {
-    new Chart(
-        document.getElementById('chartTop10'), {
+    new Chart(document.getElementById('chartTop10'), {
         type: 'bar',
         data: {
             labels: top10.map(e =>
-                `${e.nom_complet} (${e.libelle_classe})`
+                `${e.nom_complet} · ${e.libelle_classe}`
             ),
             datasets: [{
-                label:           'Moyenne générale',
                 data:            top10.map(e => e.moyenne_generale),
-                backgroundColor: top10.map((_, i) =>
-                    i === 0 ? '#d97706' :
-                    i === 1 ? '#94a3b8' :
-                    i === 2 ? '#c2410c' :
-                    '#2563eb'
-                ),
-                borderRadius: 6
+                backgroundColor: top10.map((_, i) => [
+                    '#f59e0b','#94a3b8','#cd7c44',
+                    '#6366f1','#6366f1','#6366f1',
+                    '#6366f1','#6366f1','#6366f1','#6366f1'
+                ][i] + 'cc'),
+                borderColor: top10.map((_, i) => [
+                    '#f59e0b','#94a3b8','#cd7c44',
+                    '#6366f1','#6366f1','#6366f1',
+                    '#6366f1','#6366f1','#6366f1','#6366f1'
+                ][i]),
+                borderWidth:   1,
+                borderRadius:  6,
+                borderSkipped: false
             }]
         },
-        options: {
-            indexAxis: 'y',  // Barres horizontales
-            responsive: true,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: ctx =>
-                            ` Moyenne : ${ctx.raw}/20`
-                    }
-                }
-            },
+        options: chartOpts({
+            indexAxis: 'y',
             scales: {
                 x: {
+                    grid:  { color: 'rgba(255,255,255,0.04)' },
+                    ticks: { color: '#64748b', font: { size: 11 } },
                     beginAtZero: true,
-                    max: 20,
-                    ticks: { stepSize: 2 }
+                    max: 20
+                },
+                y: {
+                    grid:  { display: false },
+                    ticks: { color: '#94a3b8', font: { size: 12 } }
                 }
             }
-        }
+        })
     });
 }

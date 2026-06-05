@@ -10,84 +10,62 @@
 <body>
 
 <nav>
-    <span class="logo">📚 DEV DATA P8</span>
-    <div>
+    <span class="logo">◈ DEV DATA P8</span>
+    <div class="nav-links">
         <a href="/">Étudiants</a>
-        <a href="/dashboard">Dashboard</a>
+        <a href="/dashboard" class="active">Dashboard</a>
     </div>
 </nav>
 
 <div class="container">
 
-    <h1 style="margin-bottom:24px; font-size:22px;
-               color:#1e293b;">
-        📊 Tableau de bord
-    </h1>
+    <div class="page-header">
+        <h1>Tableau de bord</h1>
+        <p>Statistiques et indicateurs de performance académique</p>
+    </div>
 
-    <!-- KPI -->
     <div id="kpi-container"
          style="display:grid;
-                grid-template-columns:repeat(auto-fit,
-                    minmax(160px, 1fr));
-                gap:16px; margin-bottom:28px;">
-        <div class="loading">
+                grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+                gap:14px; margin-bottom:24px;">
+        <div class="loading" style="grid-column:1/-1">
             <div class="spinner"></div>
         </div>
     </div>
 
-    <!-- Graphiques ligne 1 -->
-    <div style="display:grid;
-                grid-template-columns:1fr 1fr;
-                gap:20px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr;
+                gap:16px; margin-bottom:16px;">
 
-        <div class="card">
-            <h3 style="margin-bottom:16px; font-size:15px;
-                       color:#475569;">
-                📚 Étudiants par classe
-            </h3>
-            <canvas id="chartClasses"></canvas>
+        <div class="chart-card">
+            <h3>Étudiants par classe</h3>
+            <canvas id="chartClasses" height="220"></canvas>
         </div>
 
-        <div class="card">
-            <h3 style="margin-bottom:16px; font-size:15px;
-                       color:#475569;">
-                🗂️ Répartition par source
-            </h3>
-            <canvas id="chartSources"></canvas>
+        <div class="chart-card">
+            <h3>Répartition par source</h3>
+            <canvas id="chartSources" height="220"></canvas>
         </div>
 
     </div>
 
-    <!-- Graphiques ligne 2 -->
-    <div style="display:grid;
-                grid-template-columns:1fr 1fr;
-                gap:20px; margin-bottom:20px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr;
+                gap:16px; margin-bottom:16px;">
 
-        <div class="card">
-            <h3 style="margin-bottom:16px; font-size:15px;
-                       color:#475569;">
-                ✅ Valides vs Invalides
-            </h3>
-            <canvas id="chartValidite"></canvas>
+        <div class="chart-card">
+            <h3>Valides vs Invalides</h3>
+            <canvas id="chartValidite" height="220"></canvas>
         </div>
 
-        <div class="card">
-            <h3 style="margin-bottom:16px; font-size:15px;
-                       color:#475569;">
-                📈 Moyenne générale par classe
-            </h3>
-            <canvas id="chartMoyennes"></canvas>
+        <div class="chart-card">
+            <h3>Moyenne générale par classe</h3>
+            <canvas id="chartMoyennes" height="220"></canvas>
         </div>
 
     </div>
 
-    <!-- Top 10 -->
-    <div class="card">
-        <h3 style="margin-bottom:16px; font-size:15px;
-                   color:#475569;">
-            🏆 Top 10 des meilleures moyennes
-        </h3>
-        <canvas id="chartTop10" height="80"></canvas>
+    <div class="chart-card">
+        <h3>Top 10 — Meilleures moyennes</h3>
+        <canvas id="chartTop10" height="90"></canvas>
     </div>
 
 </div>

@@ -9,20 +9,25 @@
 <body>
 
 <nav>
-    <span class="logo">📚 DEV DATA P8</span>
-    <div>
-        <a href="/">Étudiants</a>
+    <span class="logo">◈ DEV DATA P8</span>
+    <div class="nav-links">
+        <a href="/" class="active">Étudiants</a>
         <a href="/dashboard">Dashboard</a>
     </div>
 </nav>
 
 <div class="container">
 
+    <div class="page-header">
+        <h1>Gestion des étudiants</h1>
+        <p>Consultation, modification et suivi des données académiques</p>
+    </div>
+
     <div class="card">
         <div class="toolbar">
 
             <input type="text" id="recherche"
-                placeholder="🔍 Rechercher nom, prénom, numéro...">
+                placeholder="Rechercher nom, prénom, numéro...">
 
             <select id="filtreClasse">
                 <option value="">Toutes les classes</option>
@@ -30,8 +35,8 @@
 
             <select id="filtreSource">
                 <option value="tous">Toutes sources</option>
-                <option value="db">DB uniquement</option>
-                <option value="json">JSON uniquement</option>
+                <option value="db">Base de données</option>
+                <option value="json">Fichier JSON</option>
             </select>
 
             <select id="filtreValidite">
@@ -41,33 +46,33 @@
             </select>
 
             <select id="limitePage">
-                <option value="5">5 par page</option>
-                <option value="10">10 par page</option>
-                <option value="20">20 par page</option>
-                <option value="50">50 par page</option>
+                <option value="5">5 / page</option>
+                <option value="10">10 / page</option>
+                <option value="20">20 / page</option>
+                <option value="50">50 / page</option>
             </select>
 
             <button id="toggleArchive" class="btn btn-outline">
-                🗄️ Archives
+                🗄 Archives
             </button>
 
             <button id="btnAjouter"
                 class="btn btn-primary"
                 onclick="ouvrirAjout()">
-                ➕ Ajouter
+                + Ajouter
             </button>
 
             <button id="btnImporter"
                 class="btn btn-success"
                 onclick="importerSelection()"
                 disabled>
-                ⬆️ Importer sélection
+                ↑ Importer
             </button>
 
         </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="padding:0; overflow:hidden;">
 
         <div id="loading" class="loading">
             <div class="spinner"></div>
@@ -79,7 +84,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>☑</th>
+                            <th style="width:40px">☑</th>
                             <th>Code</th>
                             <th>Numéro</th>
                             <th>Nom</th>
@@ -95,11 +100,9 @@
                 </table>
             </div>
 
-            <div class="pagination">
-                <span id="paginationInfo"
-                    class="pagination-info"></span>
-                <div id="pagination"
-                    class="pagination-controls"></div>
+            <div class="pagination" style="padding:12px 20px;">
+                <span id="paginationInfo" class="pagination-info"></span>
+                <div id="pagination" class="pagination-controls"></div>
             </div>
         </div>
 
@@ -114,7 +117,6 @@
 </div>
 
 <div class="toast" id="toast"></div>
-
 <script src="/static/js/app.js"></script>
 </body>
 </html>
