@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("/etudiants")
 def liste_etudiants(
     page:      int  = Query(default=1,  ge=1),
-    limite:    int  = Query(default=5,  ge=1, le=100),
+    limite: int = Query(default=5, ge=1, le=500),
     recherche: str  = Query(default=None),
     classe:    str  = Query(default=None),
     archive:   bool = Query(default=False)

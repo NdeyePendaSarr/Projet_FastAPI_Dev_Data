@@ -8,14 +8,13 @@ from app.database.connection import get_connection
 def compter_etudiants(recherche=None, classe=None, archive=False):
     """
     Compte le nombre total d'étudiants selon les filtres.
-    Utilisé pour calculer le nombre de pages.
     """
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
         conditions = ["e.est_archive = %s"]
-        valeurs = [archive]
+        valeurs    = [archive]
 
         if recherche:
             conditions.append(
@@ -48,8 +47,7 @@ def compter_etudiants(recherche=None, classe=None, archive=False):
 def lister_etudiants(page=1, limite=5, recherche=None,
                      classe=None, archive=False):
     """
-    Retourne une page d'étudiants avec leurs informations.
-    Inclut la moyenne générale calculée depuis resultat_matiere.
+    Retourne une page d'étudiants avec leur moyenne générale.
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -58,7 +56,7 @@ def lister_etudiants(page=1, limite=5, recherche=None,
         offset = (page - 1) * limite
 
         conditions = ["e.est_archive = %s"]
-        valeurs = [archive]
+        valeurs    = [archive]
 
         if recherche:
             conditions.append(
@@ -74,7 +72,6 @@ def lister_etudiants(page=1, limite=5, recherche=None,
 
         where = " AND ".join(conditions)
 
-        # Requête principale avec moyenne générale
         cursor.execute(f"""
             SELECT
                 e.id_etudiant,
@@ -88,32 +85,32 @@ def lister_etudiants(page=1, limite=5, recherche=None,
                 e.est_valide,
                 e.source,
                 e.created_at,
-                ROUND(AVG(r.moyenne_matiere)::numeric, 2) AS moyenne_generale
+                ROUND(AVG(r.moyenne_matiere)::numeric, 2)
+                    AS moyenne_generale
             FROM etudiant e
             JOIN classe c ON e.id_classe = c.id_classe
-            LEFT JOIN resultat_matiere r ON r.id_etudiant = e.id_etudiant
+            LEFT JOIN resultat_matiere r
+                ON r.id_etudiant = e.id_etudiant
             WHERE {where}
             GROUP BY e.id_etudiant, e.code, e.numero, e.nom,
                      e.prenom, e.date_naissance, c.libelle_classe,
-                     e.est_archive, e.est_valide, e.source, e.created_at
+                     e.est_archive, e.est_valide,
+                     e.source, e.created_at
             ORDER BY e.nom, e.prenom
             LIMIT %s OFFSET %s
         """, valeurs + [limite, offset])
 
         colonnes = [desc[0] for desc in cursor.description]
-        lignes = cursor.fetchall()
+        lignes   = cursor.fetchall()
 
-        # Convertir en liste de dictionnaires
         etudiants = []
         for ligne in lignes:
             etudiant = dict(zip(colonnes, ligne))
-            # Convertir les types non-sérialisables en JSON
             etudiant['date_naissance'] = str(etudiant['date_naissance'])
-            etudiant['created_at'] = str(etudiant['created_at'])
+            etudiant['created_at']     = str(etudiant['created_at'])
             etudiant['moyenne_generale'] = float(
                 etudiant['moyenne_generale']
             ) if etudiant['moyenne_generale'] else None
-            # Indiquer la source d'affichage
             etudiant['origine'] = 'DB'
             etudiants.append(etudiant)
 
@@ -132,7 +129,6 @@ def get_etudiant_par_id(id_etudiant):
     cursor = conn.cursor()
 
     try:
-        # Informations de base
         cursor.execute("""
             SELECT
                 e.id_etudiant, e.code, e.numero, e.nom, e.prenom,
@@ -144,17 +140,16 @@ def get_etudiant_par_id(id_etudiant):
         """, (id_etudiant,))
 
         colonnes = [desc[0] for desc in cursor.description]
-        ligne = cursor.fetchone()
+        ligne    = cursor.fetchone()
 
         if ligne is None:
             return None
 
         etudiant = dict(zip(colonnes, ligne))
         etudiant['date_naissance'] = str(etudiant['date_naissance'])
-        etudiant['created_at'] = str(etudiant['created_at'])
-        etudiant['origine'] = 'DB'
+        etudiant['created_at']     = str(etudiant['created_at'])
+        etudiant['origine']        = 'DB'
 
-        # Récupérer les notes par matière
         cursor.execute("""
             SELECT
                 m.libelle_matiere,
@@ -171,7 +166,6 @@ def get_etudiant_par_id(id_etudiant):
         for row in cursor.fetchall():
             matiere, examen, moyenne, id_resultat = row
 
-            # Récupérer les devoirs de cette matière
             cursor.execute("""
                 SELECT note_devoir FROM devoir
                 WHERE id_resultat = %s
@@ -182,7 +176,7 @@ def get_etudiant_par_id(id_etudiant):
 
             notes[matiere] = {
                 "devoirs": devoirs,
-                "examen": float(examen),
+                "examen":  float(examen),
                 "moyenne": float(moyenne)
             }
 
@@ -192,10 +186,11 @@ def get_etudiant_par_id(id_etudiant):
     finally:
         cursor.close()
         conn.close()
+
+
 def creer_etudiant(data):
     """
-    Insère un nouvel étudiant dans PostgreSQL.
-    Retourne l'étudiant créé avec son id.
+    Insère un nouvel étudiant avec ses notes dans PostgreSQL.
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -211,35 +206,60 @@ def creer_etudiant(data):
             raise ValueError(f"Classe '{data.classe}' inexistante")
         id_classe = resultat[0]
 
-        # Vérifier que le numéro n'existe pas déjà
+        # Vérifier doublon numéro
         cursor.execute(
             "SELECT id_etudiant FROM etudiant WHERE numero = %s",
             (data.numero,)
         )
         if cursor.fetchone() is not None:
-            raise ValueError(
-                f"Le numéro '{data.numero}' existe déjà"
-            )
+            raise ValueError(f"Le numéro '{data.numero}' existe déjà")
 
         # Insérer l'étudiant
         cursor.execute("""
             INSERT INTO etudiant
                 (code, numero, nom, prenom, date_naissance,
                  id_classe, est_archive, est_valide, source)
-            VALUES (%s, %s, %s, %s, %s, %s, FALSE, TRUE, 'SAISIE_MANUELLE')
+            VALUES (%s, %s, %s, %s, %s, %s,
+                    FALSE, TRUE, 'SAISIE_MANUELLE')
             RETURNING id_etudiant
         """, (
-            data.code,
-            data.numero,
-            data.nom,
-            data.prenom,
-            data.date_naissance,
-            id_classe
+            data.code, data.numero, data.nom,
+            data.prenom, data.date_naissance, id_classe
         ))
-
         id_etudiant = cursor.fetchone()[0]
-        conn.commit()
 
+        # Insérer les notes si présentes
+        for matiere_nom, note in data.notes.items():
+
+            cursor.execute(
+                "SELECT id_matiere FROM matiere "
+                "WHERE libelle_matiere = %s",
+                (matiere_nom,)
+            )
+            res_matiere = cursor.fetchone()
+            if res_matiere is None:
+                continue
+
+            cursor.execute("""
+                INSERT INTO resultat_matiere
+                    (note_examen, moyenne_matiere,
+                     id_etudiant, id_matiere)
+                VALUES (%s, %s, %s, %s)
+                RETURNING id_resultat
+            """, (
+                note.examen, note.moyenne,
+                id_etudiant, res_matiere[0]
+            ))
+            id_resultat = cursor.fetchone()[0]
+
+            for valeur in note.devoirs:
+                cursor.execute(
+                    "INSERT INTO devoir (note_devoir, id_resultat) "
+                    "VALUES (%s, %s)",
+                    (valeur, id_resultat)
+                )
+
+        conn.commit()
         return get_etudiant_par_id(id_etudiant)
 
     except Exception:
@@ -258,7 +278,6 @@ def modifier_etudiant(id_etudiant, data):
     cursor = conn.cursor()
 
     try:
-        # Vérifier que l'étudiant existe
         cursor.execute(
             "SELECT id_etudiant FROM etudiant WHERE id_etudiant = %s",
             (id_etudiant,)
@@ -266,9 +285,7 @@ def modifier_etudiant(id_etudiant, data):
         if cursor.fetchone() is None:
             return None
 
-        # Construire dynamiquement la requête UPDATE
-        # On ne met à jour que les champs non-null
-        champs = []
+        champs  = []
         valeurs = []
 
         if data.nom is not None:
@@ -298,7 +315,6 @@ def modifier_etudiant(id_etudiant, data):
             valeurs.append(resultat[0])
 
         if not champs:
-            # Rien à modifier
             return get_etudiant_par_id(id_etudiant)
 
         valeurs.append(id_etudiant)
@@ -323,7 +339,6 @@ def modifier_etudiant(id_etudiant, data):
 def archiver_etudiant(id_etudiant):
     """
     Archive logiquement un étudiant.
-    Il reste dans la base mais disparaît des listes.
     """
     conn = get_connection()
     cursor = conn.cursor()
@@ -342,8 +357,7 @@ def archiver_etudiant(id_etudiant):
             return None, "deja_archive"
 
         cursor.execute("""
-            UPDATE etudiant
-            SET est_archive = TRUE
+            UPDATE etudiant SET est_archive = TRUE
             WHERE id_etudiant = %s
         """, (id_etudiant,))
 
@@ -379,8 +393,7 @@ def restaurer_etudiant(id_etudiant):
             return None, "pas_archive"
 
         cursor.execute("""
-            UPDATE etudiant
-            SET est_archive = FALSE
+            UPDATE etudiant SET est_archive = FALSE
             WHERE id_etudiant = %s
         """, (id_etudiant,))
 

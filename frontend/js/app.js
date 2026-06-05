@@ -6,15 +6,15 @@ const API = 'http://localhost:8000/api/v1';
 
 // ── État global de l'application ──
 const etat = {
-    page:      1,
-    limite:    5,
-    recherche: '',
-    classe:    '',
-    source:    'tous',   // 'tous', 'db', 'json'
-    archive:   false,
-    total:     0,
+    page:       1,
+    limite:     5,
+    recherche:  '',
+    classe:     '',
+    source:     'tous',
+    archive:    false,
+    total:      0,
     totalPages: 0,
-    selection: new Set()  // numéros cochés pour import
+    selection:  new Set()
 };
 
 // ── Initialisation au chargement ──
@@ -22,6 +22,11 @@ document.addEventListener('DOMContentLoaded', () => {
     chargerClasses();
     chargerDonnees();
     attacherEvenements();
+
+    document.getElementById('modalOverlay')
+        .addEventListener('click', function(e) {
+            if (e.target === this) fermerModal();
+        });
 });
 
 // ============================================
@@ -32,7 +37,6 @@ async function chargerDonnees() {
     afficherChargement(true);
 
     try {
-        // 1. Charger les données DB
         const params = new URLSearchParams({
             page:   etat.page,
             limite: etat.limite
@@ -41,27 +45,26 @@ async function chargerDonnees() {
         if (etat.classe)    params.append('classe',    etat.classe);
         if (etat.archive)   params.append('archive',   'true');
 
-        const repDB = await fetch(`${API}/etudiants?${params}`);
+        const repDB  = await fetch(`${API}/etudiants?${params}`);
         const dataDB = await repDB.json();
 
         let etudiants  = dataDB.data;
         let total      = dataDB.pagination.total;
         let totalPages = dataDB.pagination.total_pages;
 
-        // 2. Compléter avec JSON si moins de 5 résultats DB
-        //    (uniquement si pas de filtre archive et source != 'db')
+        // Compléter avec JSON si moins de lignes que la limite
         if (etudiants.length < etat.limite
             && !etat.archive
             && etat.source !== 'db') {
 
             const manquants = etat.limite - etudiants.length;
-            const repJSON = await fetch(
+            const repJSON   = await fetch(
                 `${API}/json/etudiants?page=1&limite=${manquants}`
             );
             const dataJSON = await repJSON.json();
 
-            // Filtrer par recherche côté client si nécessaire
             let jsonFiltres = dataJSON.data;
+
             if (etat.recherche) {
                 const terme = etat.recherche.toLowerCase();
                 jsonFiltres = jsonFiltres.filter(e =>
@@ -82,18 +85,15 @@ async function chargerDonnees() {
             totalPages = Math.ceil(total / etat.limite) || 1;
         }
 
-        // 3. Filtrer par source si demandé
         if (etat.source === 'db') {
             etudiants = etudiants.filter(e => e.origine === 'DB');
         } else if (etat.source === 'json') {
             etudiants = etudiants.filter(e => e.origine === 'JSON');
         }
 
-        // 4. Mettre à jour l'état
         etat.total      = total;
         etat.totalPages = totalPages;
 
-        // 5. Afficher
         afficherTableau(etudiants);
         afficherPagination();
         afficherInfo(total);
@@ -108,7 +108,7 @@ async function chargerDonnees() {
 
 async function chargerClasses() {
     try {
-        const rep = await fetch(`${API}/etudiants?limite=200`);
+        const rep = await fetch(`${API}/etudiants?page=1&limite=200`);
         const data = await rep.json();
         const classes = [
             ...new Set(data.data.map(e => e.libelle_classe))
@@ -116,8 +116,8 @@ async function chargerClasses() {
 
         const select = document.getElementById('filtreClasse');
         classes.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c;
+            const opt       = document.createElement('option');
+            opt.value       = c;
             opt.textContent = c;
             select.appendChild(opt);
         });
@@ -149,56 +149,85 @@ function afficherTableau(etudiants) {
         const badgeClass = estJSON ? 'badge-json' : 'badge-db';
         const badgeTexte = estJSON ? 'JSON' : 'DB';
 
-        // Calculer moyenne générale pour les données JSON
         let moyenne = e.moyenne_generale;
         if (moyenne === undefined && e.notes) {
             const moyennes = Object.values(e.notes)
                 .map(n => n.moyenne);
             moyenne = moyennes.length
-                ? (moyennes.reduce((a,b) => a+b, 0)
+                ? (moyennes.reduce((a, b) => a + b, 0)
                    / moyennes.length).toFixed(2)
                 : '-';
+        }
+
+        // ── Boutons actions selon contexte ──
+        let boutonsActions = '';
+        if (estJSON) {
+            boutonsActions = `
+                <span style="color:#94a3b8; font-size:12px;">
+                    Lecture seule
+                </span>`;
+        } else if (etat.archive) {
+            // Mode archives → bouton restaurer uniquement
+            boutonsActions = `
+                <button class="btn btn-success btn-sm"
+                    onclick="restaurerEtudiant(${e.id_etudiant})"
+                    title="Restaurer">
+                    ♻️ Restaurer
+                </button>`;
+        } else {
+            // Mode normal → case Mode édition + bouton archiver
+            boutonsActions = `
+                <div style="display:flex; flex-direction:column;
+                            gap:4px;">
+                    <label style="display:flex; align-items:center;
+                                  gap:6px; cursor:pointer;
+                                  font-size:12px; white-space:nowrap;">
+                        <input type="checkbox"
+                            class="cb-mode-edition"
+                            onchange="toggleModeEdition(
+                                this, ${e.id_etudiant})">
+                        Mode édition
+                    </label>
+                    <button class="btn btn-danger btn-sm"
+                        onclick="archiverEtudiant(${e.id_etudiant})"
+                        title="Archiver">
+                        🗄️ Archiver
+                    </button>
+                </div>`;
         }
 
         return `
         <tr data-id="${e.id_etudiant || ''}"
             data-numero="${e.numero}"
-            data-origine="${e.origine}">
+            data-origine="${e.origine}"
+            data-date-iso="${e.date_naissance || ''}">
             <td>
                 <input type="checkbox"
                     class="cb-selection"
                     data-numero="${e.numero}"
                     ${estJSON ? '' : 'disabled'}
-                    ${etat.selection.has(e.numero) ? 'checked' : ''}>
+                    ${etat.selection.has(e.numero)
+                        ? 'checked' : ''}>
             </td>
             <td>${e.code}</td>
             <td>${e.numero}</td>
             <td>${e.nom}</td>
             <td>${e.prenom}</td>
-            <td>${formaterDate(e.date_naissance)}</td>
+            <td data-iso="${e.date_naissance || ''}">
+                ${formaterDate(e.date_naissance)}
+            </td>
             <td>${e.libelle_classe || e.classe}</td>
             <td>${moyenne ?? '-'}</td>
-            <td><span class="badge ${badgeClass}">${badgeTexte}</span></td>
             <td>
-                ${!estJSON ? `
-                <button class="btn btn-outline btn-sm"
-                    onclick="ouvrirModification(${e.id_etudiant})">
-                    ✏️
-                </button>
-                <button class="btn btn-danger btn-sm"
-                    onclick="archiverEtudiant(${e.id_etudiant})">
-                    🗄️
-                </button>
-                ` : `
-                <span style="color:#94a3b8; font-size:12px;">
-                    Lecture seule
+                <span class="badge ${badgeClass}">
+                    ${badgeTexte}
                 </span>
-                `}
             </td>
+            <td>${boutonsActions}</td>
         </tr>`;
     }).join('');
 
-    // Attacher les événements checkbox
+    // Attacher événements checkbox sélection
     document.querySelectorAll('.cb-selection').forEach(cb => {
         cb.addEventListener('change', e => {
             const numero = e.target.dataset.numero;
@@ -215,41 +244,36 @@ function afficherTableau(etudiants) {
 function afficherPagination() {
     const conteneur = document.getElementById('pagination');
     const { page, totalPages } = etat;
-
     let html = '';
 
-    // Bouton précédent
     html += `<button class="page-btn"
         onclick="changerPage(${page - 1})"
         ${page <= 1 ? 'disabled' : ''}>‹</button>`;
 
-    // Numéros de pages
     const debut = Math.max(1, page - 2);
     const fin   = Math.min(totalPages, page + 2);
 
     if (debut > 1) {
         html += `<button class="page-btn"
             onclick="changerPage(1)">1</button>`;
-        if (debut > 2) {
-            html += `<span style="padding:0 4px">…</span>`;
-        }
+        if (debut > 2) html +=
+            `<span style="padding:0 4px">…</span>`;
     }
 
     for (let i = debut; i <= fin; i++) {
-        html += `<button class="page-btn ${i === page ? 'active' : ''}"
+        html += `<button class="page-btn
+            ${i === page ? 'active' : ''}"
             onclick="changerPage(${i})">${i}</button>`;
     }
 
     if (fin < totalPages) {
-        if (fin < totalPages - 1) {
-            html += `<span style="padding:0 4px">…</span>`;
-        }
+        if (fin < totalPages - 1) html +=
+            `<span style="padding:0 4px">…</span>`;
         html += `<button class="page-btn"
             onclick="changerPage(${totalPages})">
             ${totalPages}</button>`;
     }
 
-    // Bouton suivant
     html += `<button class="page-btn"
         onclick="changerPage(${page + 1})"
         ${page >= totalPages ? 'disabled' : ''}>›</button>`;
@@ -280,7 +304,7 @@ function afficherErreur(msg) {
 }
 
 // ============================================
-// INTERACTIONS
+// PAGINATION ET FILTRES
 // ============================================
 
 function changerPage(page) {
@@ -293,9 +317,8 @@ function changerPage(page) {
 function majBoutonImport() {
     const btn = document.getElementById('btnImporter');
     if (!btn) return;
-    btn.disabled   = etat.selection.size === 0;
-    btn.textContent =
-        etat.selection.size > 0
+    btn.disabled    = etat.selection.size === 0;
+    btn.textContent = etat.selection.size > 0
         ? `⬆️ Importer (${etat.selection.size})`
         : '⬆️ Importer sélection';
 }
@@ -311,7 +334,6 @@ async function importerSelection() {
             body:    JSON.stringify(numeros)
         });
         const resultat = await rep.json();
-
         afficherToast(
             `${resultat.total_importes} étudiant(s) importé(s)`,
             'success'
@@ -319,15 +341,13 @@ async function importerSelection() {
         etat.selection.clear();
         majBoutonImport();
         chargerDonnees();
-
     } catch (err) {
-        afficherToast('Erreur lors de l\'import', 'error');
+        afficherToast("Erreur lors de l'import", 'error');
     }
 }
 
 async function archiverEtudiant(id) {
     if (!confirm('Archiver cet étudiant ?')) return;
-
     try {
         const rep = await fetch(
             `${API}/etudiants/${id}/archive`,
@@ -345,53 +365,565 @@ async function archiverEtudiant(id) {
     }
 }
 
+async function restaurerEtudiant(id) {
+    try {
+        const rep = await fetch(
+            `${API}/etudiants/${id}/restore`,
+            { method: 'POST' }
+        );
+        if (rep.ok) {
+            afficherToast('Étudiant restauré', 'success');
+            chargerDonnees();
+        } else {
+            const err = await rep.json();
+            afficherToast(err.detail, 'error');
+        }
+    } catch (err) {
+        afficherToast('Erreur restauration', 'error');
+    }
+}
+
+// ============================================
+// MODIFICATION MODE ÉDITION (case à cocher)
+// ============================================
+
+function toggleModeEdition(checkbox, idEtudiant) {
+    const tr = checkbox.closest('tr');
+
+    if (checkbox.checked) {
+        // Colonnes éditables : nom(3), prenom(4), date(5), classe(6)
+        // Nom
+        const tdNom  = tr.cells[3];
+        const valNom = tdNom.textContent.trim();
+        tdNom.innerHTML = `
+            <input type="text" class="edit-field"
+                value="${valNom}"
+                style="padding:4px; width:100%;
+                       border:1px solid #2563eb;
+                       border-radius:4px;">`;
+
+        // Prénom
+        const tdPrenom  = tr.cells[4];
+        const valPrenom = tdPrenom.textContent.trim();
+        tdPrenom.innerHTML = `
+            <input type="text" class="edit-field"
+                value="${valPrenom}"
+                style="padding:4px; width:100%;
+                       border:1px solid #2563eb;
+                       border-radius:4px;">`;
+
+        // Date
+        const tdDate  = tr.cells[5];
+        const isoDate = tdDate.dataset.iso || '';
+        tdDate.innerHTML = `
+            <input type="date" class="edit-field"
+                value="${isoDate}"
+                style="padding:4px;
+                       border:1px solid #2563eb;
+                       border-radius:4px;">`;
+
+        // Classe
+        const tdClasse  = tr.cells[6];
+        const valClasse = tdClasse.textContent.trim();
+        tdClasse.innerHTML = `
+            <select class="edit-field"
+                style="padding:4px;
+                       border:1px solid #2563eb;
+                       border-radius:4px;">
+                ${genererOptionsClasses()}
+            </select>`;
+        tdClasse.querySelector('select').value = valClasse;
+
+        // Remplacer le contenu de la cellule actions
+        const tdActions = tr.cells[tr.cells.length - 1];
+        tdActions.innerHTML = `
+            <div style="display:flex; flex-direction:column;
+                        gap:4px;">
+                <label style="display:flex; align-items:center;
+                              gap:6px; cursor:pointer;
+                              font-size:12px;">
+                    <input type="checkbox"
+                        class="cb-mode-edition" checked
+                        onchange="toggleModeEdition(
+                            this, ${idEtudiant})">
+                    Mode édition
+                </label>
+                <button class="btn btn-success btn-sm"
+                    onclick="sauvegarderLigne(
+                        ${idEtudiant},
+                        this.closest('tr'))">
+                    💾 Sauvegarder
+                </button>
+            </div>`;
+
+    } else {
+        // Décocher → annuler → recharger
+        chargerDonnees();
+    }
+}
+
+async function sauvegarderLigne(idEtudiant, tr) {
+    const champs = tr.querySelectorAll('.edit-field');
+
+    if (champs.length < 4) {
+        afficherToast('Erreur : champs introuvables', 'error');
+        return;
+    }
+
+    const donnees = {
+        nom:            champs[0].value.trim(),
+        prenom:         champs[1].value.trim(),
+        date_naissance: champs[2].value,
+        classe:         champs[3].value
+    };
+
+    try {
+        const rep = await fetch(`${API}/etudiants/${idEtudiant}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(donnees)
+        });
+
+        if (rep.ok) {
+            afficherToast('Modifications sauvegardées', 'success');
+            chargerDonnees();
+        } else {
+            const err = await rep.json();
+            afficherToast(err.detail || 'Erreur', 'error');
+        }
+    } catch (err) {
+        afficherToast('Erreur réseau', 'error');
+    }
+}
+
+// ============================================
+// MODIFICATION INLINE (double-clic cellule)
+// ============================================
+
+document.addEventListener('dblclick', function(e) {
+    const td = e.target.closest('td');
+    const tr = e.target.closest('tr');
+
+    if (!td || !tr) return;
+    if (tr.dataset.origine !== 'DB') return;
+
+    const index = td.cellIndex;
+    // Double-clic autorisé sur Nom(3) et Prénom(4) uniquement
+    if (index !== 3 && index !== 4) return;
+    if (td.querySelector('input')) return;
+
+    const valeurActuelle = td.textContent.trim();
+    const idEtudiant     = tr.dataset.id;
+    const champ          = index === 3 ? 'nom' : 'prenom';
+
+    td.innerHTML = `
+        <input type="text"
+            value="${valeurActuelle}"
+            style="width:100%; padding:4px 8px;
+                   border:2px solid #2563eb;
+                   border-radius:4px; font-size:14px;"
+            onkeydown="gererToucheInline(event, this,
+                ${idEtudiant}, '${champ}',
+                '${valeurActuelle}')"
+            autofocus>
+    `;
+});
+
+async function gererToucheInline(event, input,
+                                  idEtudiant, champ,
+                                  valeurOriginale) {
+    if (event.key === 'Escape') {
+        input.closest('td').textContent = valeurOriginale;
+        return;
+    }
+
+    if (event.key === 'Enter') {
+        const nouvelleValeur = input.value.trim();
+        if (!nouvelleValeur) {
+            afficherToast('La valeur ne peut pas être vide', 'error');
+            return;
+        }
+
+        try {
+            const corps  = {};
+            corps[champ] = nouvelleValeur;
+
+            const rep = await fetch(
+                `${API}/etudiants/${idEtudiant}`, {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify(corps)
+            });
+
+            if (rep.ok) {
+                input.closest('td').textContent = nouvelleValeur;
+                afficherToast('Modifié', 'success');
+            } else {
+                input.closest('td').textContent = valeurOriginale;
+                afficherToast('Erreur modification', 'error');
+            }
+        } catch (err) {
+            input.closest('td').textContent = valeurOriginale;
+            afficherToast('Erreur réseau', 'error');
+        }
+    }
+}
+
+// ============================================
+// AJOUT D'UN ÉTUDIANT AVEC NOTES
+// ============================================
+
+function ouvrirAjout() {
+    document.getElementById('modalTitre').textContent =
+        'Ajouter un étudiant';
+
+    const matieres = ['Math','Francais','Anglais','PC','SVT','HG'];
+
+    const champsNotes = matieres.map(m => `
+        <fieldset style="border:1px solid #e2e8f0;
+                         border-radius:8px; padding:12px;
+                         margin-bottom:10px;">
+            <legend style="font-weight:600; padding:0 8px;
+                           color:#2563eb; font-size:13px;">
+                ${m}
+            </legend>
+            <div style="display:grid;
+                        grid-template-columns:1fr 1fr;
+                        gap:10px;">
+                <div>
+                    <label style="font-size:12px;
+                                  color:#64748b;">
+                        Devoirs
+                        <small>(séparés par virgule)</small>
+                    </label>
+                    <input type="text"
+                        id="note-${m}-devoirs"
+                        placeholder="Ex: 12, 14, 10"
+                        style="width:100%; padding:6px;
+                               border:1px solid #e2e8f0;
+                               border-radius:4px; margin-top:4px;">
+                </div>
+                <div>
+                    <label style="font-size:12px;
+                                  color:#64748b;">
+                        Examen (0–20)
+                    </label>
+                    <input type="number"
+                        id="note-${m}-examen"
+                        min="0" max="20" step="0.01"
+                        placeholder="0 - 20"
+                        style="width:100%; padding:6px;
+                               border:1px solid #e2e8f0;
+                               border-radius:4px; margin-top:4px;"
+                        oninput="calculerMoyenneMatiere('${m}')">
+                </div>
+            </div>
+            <div style="margin-top:6px; font-size:12px;
+                        color:#64748b;">
+                Moyenne calculée :
+                <strong id="moy-${m}"
+                    style="color:#2563eb;">—</strong>
+            </div>
+        </fieldset>
+    `).join('');
+
+    document.getElementById('modalContenu').innerHTML = `
+        <div style="max-height:72vh; overflow-y:auto;
+                    padding-right:6px;">
+
+            <p style="font-size:13px; color:#64748b;
+                      margin-bottom:14px;">
+                ★ Champs obligatoires
+            </p>
+
+            <div style="display:grid;
+                        grid-template-columns:1fr 1fr;
+                        gap:12px; margin-bottom:16px;">
+                <div class="form-group">
+                    <label>Code ★</label>
+                    <input type="text" id="f-code"
+                        placeholder="AAD004" maxlength="6"
+                        style="text-transform:uppercase">
+                    <div class="form-error" id="err-code"></div>
+                </div>
+                <div class="form-group">
+                    <label>Numéro ★</label>
+                    <input type="text" id="f-numero"
+                        placeholder="H5G32YR" maxlength="7"
+                        style="text-transform:uppercase">
+                    <div class="form-error" id="err-numero"></div>
+                </div>
+                <div class="form-group">
+                    <label>Nom ★</label>
+                    <input type="text" id="f-nom">
+                    <div class="form-error" id="err-nom"></div>
+                </div>
+                <div class="form-group">
+                    <label>Prénom ★</label>
+                    <input type="text" id="f-prenom">
+                    <div class="form-error" id="err-prenom"></div>
+                </div>
+                <div class="form-group">
+                    <label>Date de naissance ★</label>
+                    <input type="date" id="f-date">
+                    <div class="form-error" id="err-date"></div>
+                </div>
+                <div class="form-group">
+                    <label>Classe ★</label>
+                    <select id="f-classe">
+                        <option value="">-- Choisir --</option>
+                        ${genererOptionsClasses()}
+                    </select>
+                    <div class="form-error" id="err-classe"></div>
+                </div>
+            </div>
+
+            <h3 style="font-size:13px; text-transform:uppercase;
+                       letter-spacing:1px; color:#475569;
+                       margin-bottom:12px;">
+                Notes par matière
+                <small style="font-size:11px; color:#94a3b8;
+                              text-transform:none;">
+                    (optionnel — saisir devoirs ET examen)
+                </small>
+            </h3>
+
+            ${champsNotes}
+
+            <div style="display:flex; gap:12px; margin-top:16px;
+                        position:sticky; bottom:0; background:white;
+                        padding:12px 0;
+                        border-top:1px solid #e2e8f0;">
+                <button class="btn btn-primary"
+                    onclick="soumettrAjout()">
+                    ✅ Enregistrer
+                </button>
+                <button class="btn btn-outline"
+                    onclick="fermerModal()">
+                    Annuler
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('modalOverlay').classList.add('open');
+}
+
+function calculerMoyenneMatiere(matiere) {
+    const devoirsStr = document.getElementById(
+        `note-${matiere}-devoirs`
+    ).value;
+    const examenVal  = parseFloat(
+        document.getElementById(`note-${matiere}-examen`).value
+    );
+
+    const devoirs = devoirsStr
+        .split(',')
+        .map(v => parseFloat(v.trim()))
+        .filter(v => !isNaN(v));
+
+    if (devoirs.length === 0 || isNaN(examenVal)) {
+        document.getElementById(`moy-${matiere}`)
+            .textContent = '—';
+        return;
+    }
+
+    const moyDevoirs = devoirs.reduce((a, b) => a + b, 0)
+                       / devoirs.length;
+    const moyenne    = (moyDevoirs + 2 * examenVal) / 3;
+
+    document.getElementById(`moy-${matiere}`).textContent =
+        moyenne.toFixed(2);
+}
+
+function collecterNotes() {
+    const matieres = ['Math','Francais','Anglais','PC','SVT','HG'];
+    const notes    = {};
+
+    for (const m of matieres) {
+        const devoirsStr = document.getElementById(
+            `note-${m}-devoirs`
+        ).value.trim();
+        const examenStr  = document.getElementById(
+            `note-${m}-examen`
+        ).value.trim();
+
+        if (!devoirsStr && !examenStr) continue;
+
+        const devoirs = devoirsStr
+            .split(',')
+            .map(v => parseFloat(v.trim()))
+            .filter(v => !isNaN(v));
+
+        const examen = parseFloat(examenStr);
+
+        if (devoirs.length === 0 || isNaN(examen)) {
+            afficherToast(
+                `${m} : remplis les devoirs ET l'examen`,
+                'error'
+            );
+            return null;
+        }
+
+        const moyDevoirs = devoirs.reduce((a, b) => a + b, 0)
+                           / devoirs.length;
+        const moyenne    = Math.round(
+            ((moyDevoirs + 2 * examen) / 3) * 100
+        ) / 100;
+
+        notes[m] = { devoirs, examen, moyenne };
+    }
+
+    return notes;
+}
+
+function genererOptionsClasses() {
+    const classes = [
+        '6emeA','6emeB','6emeC','6emeD',
+        '5emeA','5emeB','5emeC','5emeD',
+        '4emeA','4emeB','4emeC','4emeD',
+        '3emeA','3emeB','3emeC','3emeD'
+    ];
+    return classes.map(c =>
+        `<option value="${c}">${c}</option>`
+    ).join('');
+}
+
+function fermerModal() {
+    document.getElementById('modalOverlay')
+        .classList.remove('open');
+}
+
+function validerFormAjout() {
+    let valide = true;
+
+    const code   = document.getElementById('f-code').value.trim();
+    const numero = document.getElementById('f-numero').value.trim();
+    const nom    = document.getElementById('f-nom').value.trim();
+    const prenom = document.getElementById('f-prenom').value.trim();
+    const date   = document.getElementById('f-date').value;
+    const classe = document.getElementById('f-classe').value;
+
+    ['code','numero','nom','prenom','date','classe'].forEach(id => {
+        document.getElementById(`err-${id}`).textContent = '';
+    });
+
+    if (!/^[A-Z]{3}[0-9]{3}$/.test(code)) {
+        document.getElementById('err-code').textContent =
+            '3 lettres majuscules + 3 chiffres. Ex: AAD004';
+        valide = false;
+    }
+
+    if (!/^[A-Z0-9]{7}$/.test(numero.toUpperCase())) {
+        document.getElementById('err-numero').textContent =
+            '7 caractères alphanumériques majuscules';
+        valide = false;
+    }
+
+    if (nom.length < 2 || !/^[a-zA-ZÀ-ÿ]/.test(nom)) {
+        document.getElementById('err-nom').textContent =
+            'Au moins 2 lettres, commence par une lettre';
+        valide = false;
+    }
+
+    if (prenom.length < 3 || !/^[a-zA-ZÀ-ÿ]/.test(prenom)) {
+        document.getElementById('err-prenom').textContent =
+            'Au moins 3 lettres, commence par une lettre';
+        valide = false;
+    }
+
+    if (!date) {
+        document.getElementById('err-date').textContent =
+            'Date obligatoire';
+        valide = false;
+    }
+
+    if (!classe) {
+        document.getElementById('err-classe').textContent =
+            'Classe obligatoire';
+        valide = false;
+    }
+
+    return valide
+        ? { code, numero, nom, prenom,
+            date_naissance: date, classe }
+        : null;
+}
+
+async function soumettrAjout() {
+    const infos = validerFormAjout();
+    if (!infos) return;
+
+    const notes = collecterNotes();
+    if (notes === null) return; // erreur dans les notes
+
+    const donnees = { ...infos, notes };
+
+    try {
+        const rep = await fetch(`${API}/etudiants`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify(donnees)
+        });
+
+        if (rep.ok) {
+            fermerModal();
+            afficherToast('Étudiant ajouté avec succès', 'success');
+            chargerDonnees();
+        } else {
+            const err = await rep.json();
+            afficherToast(
+                err.detail || "Erreur lors de l'ajout",
+                'error'
+            );
+        }
+    } catch (err) {
+        afficherToast('Erreur réseau', 'error');
+    }
+}
+
 // ============================================
 // ÉVÉNEMENTS
 // ============================================
 
 function attacherEvenements() {
-    // Recherche avec délai (évite trop de requêtes)
     let timer;
     document.getElementById('recherche')
         .addEventListener('input', e => {
             clearTimeout(timer);
             timer = setTimeout(() => {
                 etat.recherche = e.target.value;
-                etat.page = 1;
+                etat.page      = 1;
                 chargerDonnees();
             }, 400);
         });
 
-    // Filtre classe
     document.getElementById('filtreClasse')
         .addEventListener('change', e => {
             etat.classe = e.target.value;
-            etat.page = 1;
+            etat.page   = 1;
             chargerDonnees();
         });
 
-    // Filtre source
     document.getElementById('filtreSource')
         .addEventListener('change', e => {
             etat.source = e.target.value;
-            etat.page = 1;
+            etat.page   = 1;
             chargerDonnees();
         });
 
-    // Nombre de lignes par page
     document.getElementById('limitePage')
         .addEventListener('change', e => {
             etat.limite = parseInt(e.target.value);
-            etat.page = 1;
+            etat.page   = 1;
             chargerDonnees();
         });
 
-    // Toggle archives
     document.getElementById('toggleArchive')
         .addEventListener('click', () => {
             etat.archive = !etat.archive;
-            etat.page = 1;
-            const btn = document.getElementById('toggleArchive');
+            etat.page    = 1;
+            const btn    = document.getElementById('toggleArchive');
             btn.textContent = etat.archive
                 ? '📋 Actifs'
                 : '🗄️ Archives';
@@ -413,15 +945,24 @@ function formaterDate(dateStr) {
 }
 
 function afficherToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
+    const toast       = document.getElementById('toast');
     toast.textContent = message;
     toast.className   = `toast ${type} show`;
-    setTimeout(() => {
-        toast.className = 'toast';
-    }, 3000);
+    setTimeout(() => { toast.className = 'toast'; }, 3000);
 }
 
-// Exposer les fonctions globales
-window.changerPage       = changerPage;
-window.importerSelection = importerSelection;
-window.archiverEtudiant  = archiverEtudiant;
+// ============================================
+// EXPOSITION DES FONCTIONS GLOBALES
+// ============================================
+
+window.changerPage            = changerPage;
+window.importerSelection      = importerSelection;
+window.archiverEtudiant       = archiverEtudiant;
+window.restaurerEtudiant      = restaurerEtudiant;
+window.ouvrirAjout            = ouvrirAjout;
+window.fermerModal            = fermerModal;
+window.soumettrAjout          = soumettrAjout;
+window.toggleModeEdition      = toggleModeEdition;
+window.sauvegarderLigne       = sauvegarderLigne;
+window.gererToucheInline      = gererToucheInline;
+window.calculerMoyenneMatiere = calculerMoyenneMatiere;
