@@ -18,16 +18,26 @@ class NoteMatiere(BaseModel):
     examen:  float       = Field(..., ge=0, le=20)
     moyenne: float       = Field(..., ge=0, le=20)
 
+    @field_validator('devoirs')
+    @classmethod
+    def valider_devoirs(cls, v):
+        for note in v:
+            if note < 0 or note > 20:
+                raise ValueError(
+                    f'Note {note} invalide — '
+                    f'doit être entre 0 et 20'
+                )
+        return v
+
 
 class EtudiantCreer(BaseModel):
     """
-    Modèle complet pour la création d'un étudiant
-    avec ses notes.
+    Modèle complet pour la création d'un étudiant avec ses notes.
     """
-    code:           str   = Field(..., min_length=6, max_length=6)
-    numero:         str   = Field(..., min_length=7, max_length=7)
-    nom:            str   = Field(..., min_length=2)
-    prenom:         str   = Field(..., min_length=3)
+    code:           str  = Field(..., min_length=6, max_length=6)
+    numero:         str  = Field(..., min_length=7, max_length=7)
+    nom:            str  = Field(..., min_length=2)
+    prenom:         str  = Field(..., min_length=3)
     date_naissance: date
     classe:         str
     notes:          dict[str, NoteMatiere] = Field(default={})
@@ -53,24 +63,39 @@ class EtudiantCreer(BaseModel):
     @field_validator('nom')
     @classmethod
     def valider_nom(cls, v):
+        v = v.strip()
         if not v[0].isalpha():
             raise ValueError('Le nom doit commencer par une lettre')
-        return v
+        return v.upper()
 
     @field_validator('prenom')
     @classmethod
     def valider_prenom(cls, v):
+        v = v.strip()
         if not v[0].isalpha():
             raise ValueError('Le prénom doit commencer par une lettre')
-        return v
+        return v.title()
 
 
 class EtudiantModifier(BaseModel):
     """
     Modification partielle — tous les champs optionnels.
-    On ne modifie que ce qui est envoyé.
     """
-    nom:            Optional[str]   = Field(default=None, min_length=2)
-    prenom:         Optional[str]   = Field(default=None, min_length=3)
-    date_naissance: Optional[date]  = None
-    classe:         Optional[str]   = None
+    nom:            Optional[str]  = Field(default=None, min_length=2)
+    prenom:         Optional[str]  = Field(default=None, min_length=3)
+    date_naissance: Optional[date] = None
+    classe:         Optional[str]  = None
+
+    @field_validator('nom')
+    @classmethod
+    def normaliser_nom(cls, v):
+        if v is not None:
+            return v.strip().upper()
+        return v
+
+    @field_validator('prenom')
+    @classmethod
+    def normaliser_prenom(cls, v):
+        if v is not None:
+            return v.strip().title()
+        return v

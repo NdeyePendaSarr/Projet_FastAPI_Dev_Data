@@ -25,43 +25,36 @@ def convertir_date(date_str):
     """
     Convertit une date du format JJ/MM/AAAA
     vers un objet date Python compatible PostgreSQL.
-    Exemple : "02/01/2012" -> date(2012, 1, 2)
     """
     return datetime.strptime(date_str, "%d/%m/%Y").date()
 
 
 def normaliser_classe(classe_str):
     """
-    Normalise le nom de classe pour correspondre
-    exactement aux valeurs dans la table classe.
-    Exemple : "6emeA" -> "6emeA"
+    Normalise le nom de classe.
     """
     return classe_str.strip()
 
 
 def importer_tout():
     """
-    Fonction principale d'import.
-    Importe tous les étudiants de valides.json
-    dans PostgreSQL.
+    Importe tous les étudiants de valides.json dans PostgreSQL.
     """
     etudiants = charger_json()
     conn = get_connection()
     cursor = conn.cursor()
 
-    compteur_ok = 0
-    compteur_skip = 0
+    compteur_ok    = 0
+    compteur_skip  = 0
     compteur_erreur = 0
 
     try:
         for etudiant in etudiants:
             try:
-                # ----------------------------------
-                # 1. Récupérer l'id de la classe
-                # ----------------------------------
                 classe_libelle = normaliser_classe(etudiant['classe'])
                 cursor.execute(
-                    "SELECT id_classe FROM classe WHERE libelle_classe = %s",
+                    "SELECT id_classe FROM classe "
+                    "WHERE libelle_classe = %s",
                     (classe_libelle,)
                 )
                 resultat_classe = cursor.fetchone()
@@ -74,12 +67,9 @@ def importer_tout():
 
                 id_classe = resultat_classe[0]
 
-                # ----------------------------------
-                # 2. Vérifier si l'étudiant existe
-                # (numero est unique)
-                # ----------------------------------
                 cursor.execute(
-                    "SELECT id_etudiant FROM etudiant WHERE numero = %s",
+                    "SELECT id_etudiant FROM etudiant "
+                    "WHERE numero = %s",
                     (etudiant['numero'],)
                 )
                 if cursor.fetchone() is not None:
@@ -87,9 +77,6 @@ def importer_tout():
                     compteur_skip += 1
                     continue
 
-                # ----------------------------------
-                # 3. Insérer l'étudiant
-                # ----------------------------------
                 date_naissance = convertir_date(etudiant['date_naissance'])
 
                 cursor.execute("""
@@ -97,24 +84,20 @@ def importer_tout():
                         (code, numero, nom, prenom,
                          date_naissance, id_classe,
                          est_archive, est_valide, source)
-                    VALUES (%s, %s, %s, %s, %s, %s, FALSE, TRUE, 'IMPORT_JSON')
+                    VALUES (%s, %s, %s, %s, %s, %s,
+                            FALSE, TRUE, 'IMPORT_JSON')
                     RETURNING id_etudiant
                 """, (
                     etudiant['code'],
                     etudiant['numero'],
-                    etudiant['nom'],
-                    etudiant['prenom'],
+                    etudiant['nom'].upper(),
+                    etudiant['prenom'].title(),
                     date_naissance,
                     id_classe
                 ))
                 id_etudiant = cursor.fetchone()[0]
 
-                # ----------------------------------
-                # 4. Pour chaque matière
-                # ----------------------------------
                 for matiere_nom, donnees in etudiant['notes'].items():
-
-                    # Récupérer l'id de la matière
                     cursor.execute(
                         "SELECT id_matiere FROM matiere "
                         "WHERE libelle_matiere = %s",
@@ -128,7 +111,6 @@ def importer_tout():
 
                     id_matiere = resultat_matiere[0]
 
-                    # Insérer le résultat matière
                     cursor.execute("""
                         INSERT INTO resultat_matiere
                             (note_examen, moyenne_matiere,
@@ -143,24 +125,22 @@ def importer_tout():
                     ))
                     id_resultat = cursor.fetchone()[0]
 
-                    # ----------------------------------
-                    # 5. Pour chaque devoir
-                    # ----------------------------------
                     for note_devoir in donnees['devoirs']:
                         cursor.execute("""
-                            INSERT INTO devoir (note_devoir, id_resultat)
+                            INSERT INTO devoir
+                                (note_devoir, id_resultat)
                             VALUES (%s, %s)
                         """, (note_devoir, id_resultat))
 
                 compteur_ok += 1
 
             except Exception as e:
-                print(f"  ERREUR pour {etudiant.get('numero', '?')} : {e}")
+                print(f"  ERREUR pour "
+                      f"{etudiant.get('numero', '?')} : {e}")
                 conn.rollback()
                 compteur_erreur += 1
                 continue
 
-        # Valider toutes les insertions
         conn.commit()
 
     finally:
@@ -168,17 +148,19 @@ def importer_tout():
         conn.close()
 
     print(f"\n Import terminé :")
-    print(f"   Insérés avec succès : {compteur_ok}")
-    print(f"   Ignorés (doublons/classe inconnue) : {compteur_skip}")
-    print(f"   Erreurs : {compteur_erreur}")
+    print(f"   Insérés avec succès  : {compteur_ok}")
+    print(f"   Ignorés              : {compteur_skip}")
+    print(f"   Erreurs              : {compteur_erreur}")
 
 
 if __name__ == "__main__":
     importer_tout()
+
+
 def lire_json():
     """
     Retourne les données de valides.json sous forme
-    de dictionnaire indexé par numero pour accès rapide.
+    de dictionnaire indexé par numero.
     """
     etudiants = charger_json()
     return {e['numero']: e for e in etudiants}
@@ -188,24 +170,22 @@ def importer_selection(numeros: list):
     """
     Importe uniquement les étudiants dont le numéro
     est dans la liste fournie.
-    Retourne un rapport détaillé.
     """
     json_data = lire_json()
-    conn = get_connection()
-    cursor = conn.cursor()
+    conn      = get_connection()
+    cursor    = conn.cursor()
 
-    importes = []
-    doublons = []
+    importes     = []
+    doublons     = []
     introuvables = []
 
     try:
         for numero in numeros:
-            # Vérifier que le numéro existe dans le JSON
+
             if numero not in json_data:
                 introuvables.append(numero)
                 continue
 
-            # Vérifier doublon en base
             cursor.execute(
                 "SELECT id_etudiant FROM etudiant "
                 "WHERE numero = %s",
@@ -215,7 +195,6 @@ def importer_selection(numeros: list):
                 doublons.append(numero)
                 continue
 
-            # Insérer l'étudiant
             etudiant = json_data[numero]
 
             cursor.execute(
@@ -240,14 +219,13 @@ def importer_selection(numeros: list):
             """, (
                 etudiant['code'],
                 etudiant['numero'],
-                etudiant['nom'],
-                etudiant['prenom'],
+                etudiant['nom'].upper(),
+                etudiant['prenom'].title(),
                 convertir_date(etudiant['date_naissance']),
                 id_classe
             ))
             id_etudiant = cursor.fetchone()[0]
 
-            # Insérer les notes
             for matiere_nom, donnees in etudiant['notes'].items():
                 cursor.execute(
                     "SELECT id_matiere FROM matiere "
@@ -292,40 +270,41 @@ def importer_selection(numeros: list):
         conn.close()
 
     return {
-        "importes":     importes,
-        "doublons":     doublons,
-        "introuvables": introuvables,
+        "importes":       importes,
+        "doublons":       doublons,
+        "introuvables":   introuvables,
         "total_importes": len(importes)
     }
+
+
 def lire_json_pagine(page=1, limite=5):
     """
     Retourne les étudiants du JSON qui ne sont
     pas encore dans PostgreSQL, avec pagination.
+    Normalise nom et prénom à la volée.
     """
-    from app.database.connection import get_connection
-
     tous = charger_json()
     conn = get_connection()
     cursor = conn.cursor()
 
     try:
-        # Récupérer tous les numéros déjà en base
         cursor.execute("SELECT numero FROM etudiant")
         numeros_en_base = {row[0] for row in cursor.fetchall()}
 
-        # Garder uniquement ceux qui ne sont pas en base
         non_importes = [
             e for e in tous
             if e['numero'] not in numeros_en_base
         ]
 
-        total = len(non_importes)
-        offset = (page - 1) * limite
+        total     = len(non_importes)
+        offset    = (page - 1) * limite
         page_data = non_importes[offset:offset + limite]
 
-        # Ajouter le champ origine
+        # Normaliser nom/prénom et ajouter origine
         for e in page_data:
             e['origine'] = 'JSON'
+            e['nom']     = e['nom'].upper()
+            e['prenom']  = e['prenom'].title()
 
         return {
             "data": page_data,
@@ -333,7 +312,8 @@ def lire_json_pagine(page=1, limite=5):
                 "page":        page,
                 "limite":      limite,
                 "total":       total,
-                "total_pages": -(-total // limite) if total > 0 else 0
+                "total_pages": -(-total // limite)
+                               if total > 0 else 0
             }
         }
 

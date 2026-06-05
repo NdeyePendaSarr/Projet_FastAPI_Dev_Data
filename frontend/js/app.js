@@ -12,6 +12,7 @@ const etat = {
     classe:     '',
     source:     'tous',
     archive:    false,
+    validite:   '',
     total:      0,
     totalPages: 0,
     selection:  new Set()
@@ -44,22 +45,33 @@ async function chargerDonnees() {
         if (etat.recherche) params.append('recherche', etat.recherche);
         if (etat.classe)    params.append('classe',    etat.classe);
         if (etat.archive)   params.append('archive',   'true');
+        if (etat.validite)  params.append('valide',    etat.validite);
 
         const repDB  = await fetch(`${API}/etudiants?${params}`);
         const dataDB = await repDB.json();
 
         let etudiants  = dataDB.data;
-        let total      = dataDB.pagination.total;
+        let total_db   = dataDB.pagination.total;
         let totalPages = dataDB.pagination.total_pages;
 
-        // Compléter avec JSON si moins de lignes que la limite
+        // Compléter avec JSON si nécessaire
         if (etudiants.length < etat.limite
             && !etat.archive
-            && etat.source !== 'db') {
+            && etat.source !== 'db'
+            && !etat.validite) {
 
-            const manquants = etat.limite - etudiants.length;
-            const repJSON   = await fetch(
-                `${API}/json/etudiants?page=1&limite=${manquants}`
+            const manquants     = etat.limite - etudiants.length;
+            const offset_global = (etat.page - 1) * etat.limite;
+            const offset_json   = Math.max(
+                0, offset_global - total_db
+            );
+            const page_json     = Math.floor(
+                offset_json / manquants
+            ) + 1;
+
+            const repJSON  = await fetch(
+                `${API}/json/etudiants` +
+                `?page=${page_json}&limite=${manquants}`
             );
             const dataJSON = await repJSON.json();
 
@@ -80,23 +92,30 @@ async function chargerDonnees() {
                 );
             }
 
-            etudiants  = [...etudiants, ...jsonFiltres];
-            total      = total + dataJSON.pagination.total;
-            totalPages = Math.ceil(total / etat.limite) || 1;
+            etudiants = [...etudiants, ...jsonFiltres];
+
+            const total_json = dataJSON.pagination.total;
+            const total      = total_db + total_json;
+            totalPages       = Math.ceil(total / etat.limite) || 1;
+
+            etat.total      = total;
+            etat.totalPages = totalPages;
+
+        } else {
+            etat.total      = total_db;
+            etat.totalPages = totalPages;
         }
 
+        // Filtrer par source si demandé
         if (etat.source === 'db') {
             etudiants = etudiants.filter(e => e.origine === 'DB');
         } else if (etat.source === 'json') {
             etudiants = etudiants.filter(e => e.origine === 'JSON');
         }
 
-        etat.total      = total;
-        etat.totalPages = totalPages;
-
         afficherTableau(etudiants);
         afficherPagination();
-        afficherInfo(total);
+        afficherInfo(etat.total);
 
     } catch (err) {
         console.error(err);
@@ -108,7 +127,7 @@ async function chargerDonnees() {
 
 async function chargerClasses() {
     try {
-        const rep = await fetch(`${API}/etudiants?page=1&limite=200`);
+        const rep  = await fetch(`${API}/etudiants?page=1&limite=500`);
         const data = await rep.json();
         const classes = [
             ...new Set(data.data.map(e => e.libelle_classe))
@@ -159,7 +178,6 @@ function afficherTableau(etudiants) {
                 : '-';
         }
 
-        // ── Boutons actions selon contexte ──
         let boutonsActions = '';
         if (estJSON) {
             boutonsActions = `
@@ -167,7 +185,6 @@ function afficherTableau(etudiants) {
                     Lecture seule
                 </span>`;
         } else if (etat.archive) {
-            // Mode archives → bouton restaurer uniquement
             boutonsActions = `
                 <button class="btn btn-success btn-sm"
                     onclick="restaurerEtudiant(${e.id_etudiant})"
@@ -175,7 +192,6 @@ function afficherTableau(etudiants) {
                     ♻️ Restaurer
                 </button>`;
         } else {
-            // Mode normal → case Mode édition + bouton archiver
             boutonsActions = `
                 <div style="display:flex; flex-direction:column;
                             gap:4px;">
@@ -227,7 +243,6 @@ function afficherTableau(etudiants) {
         </tr>`;
     }).join('');
 
-    // Attacher événements checkbox sélection
     document.querySelectorAll('.cb-selection').forEach(cb => {
         cb.addEventListener('change', e => {
             const numero = e.target.dataset.numero;
@@ -384,15 +399,13 @@ async function restaurerEtudiant(id) {
 }
 
 // ============================================
-// MODIFICATION MODE ÉDITION (case à cocher)
+// MODE ÉDITION LIGNE COMPLÈTE
 // ============================================
 
 function toggleModeEdition(checkbox, idEtudiant) {
     const tr = checkbox.closest('tr');
 
     if (checkbox.checked) {
-        // Colonnes éditables : nom(3), prenom(4), date(5), classe(6)
-        // Nom
         const tdNom  = tr.cells[3];
         const valNom = tdNom.textContent.trim();
         tdNom.innerHTML = `
@@ -402,7 +415,6 @@ function toggleModeEdition(checkbox, idEtudiant) {
                        border:1px solid #2563eb;
                        border-radius:4px;">`;
 
-        // Prénom
         const tdPrenom  = tr.cells[4];
         const valPrenom = tdPrenom.textContent.trim();
         tdPrenom.innerHTML = `
@@ -412,7 +424,6 @@ function toggleModeEdition(checkbox, idEtudiant) {
                        border:1px solid #2563eb;
                        border-radius:4px;">`;
 
-        // Date
         const tdDate  = tr.cells[5];
         const isoDate = tdDate.dataset.iso || '';
         tdDate.innerHTML = `
@@ -422,7 +433,6 @@ function toggleModeEdition(checkbox, idEtudiant) {
                        border:1px solid #2563eb;
                        border-radius:4px;">`;
 
-        // Classe
         const tdClasse  = tr.cells[6];
         const valClasse = tdClasse.textContent.trim();
         tdClasse.innerHTML = `
@@ -434,7 +444,6 @@ function toggleModeEdition(checkbox, idEtudiant) {
             </select>`;
         tdClasse.querySelector('select').value = valClasse;
 
-        // Remplacer le contenu de la cellule actions
         const tdActions = tr.cells[tr.cells.length - 1];
         tdActions.innerHTML = `
             <div style="display:flex; flex-direction:column;
@@ -457,7 +466,6 @@ function toggleModeEdition(checkbox, idEtudiant) {
             </div>`;
 
     } else {
-        // Décocher → annuler → recharger
         chargerDonnees();
     }
 }
@@ -508,7 +516,6 @@ document.addEventListener('dblclick', function(e) {
     if (tr.dataset.origine !== 'DB') return;
 
     const index = td.cellIndex;
-    // Double-clic autorisé sur Nom(3) et Prénom(4) uniquement
     if (index !== 3 && index !== 4) return;
     if (td.querySelector('input')) return;
 
@@ -591,8 +598,7 @@ function ouvrirAjout() {
                         grid-template-columns:1fr 1fr;
                         gap:10px;">
                 <div>
-                    <label style="font-size:12px;
-                                  color:#64748b;">
+                    <label style="font-size:12px; color:#64748b;">
                         Devoirs
                         <small>(séparés par virgule)</small>
                     </label>
@@ -601,11 +607,11 @@ function ouvrirAjout() {
                         placeholder="Ex: 12, 14, 10"
                         style="width:100%; padding:6px;
                                border:1px solid #e2e8f0;
-                               border-radius:4px; margin-top:4px;">
+                               border-radius:4px; margin-top:4px;"
+                        oninput="calculerMoyenneMatiere('${m}')">
                 </div>
                 <div>
-                    <label style="font-size:12px;
-                                  color:#64748b;">
+                    <label style="font-size:12px; color:#64748b;">
                         Examen (0–20)
                     </label>
                     <input type="number"
@@ -632,9 +638,7 @@ function ouvrirAjout() {
                     padding-right:6px;">
 
             <p style="font-size:13px; color:#64748b;
-                      margin-bottom:14px;">
-                ★ Champs obligatoires
-            </p>
+                      margin-bottom:14px;">★ Champs obligatoires</p>
 
             <div style="display:grid;
                         grid-template-columns:1fr 1fr;
@@ -765,6 +769,25 @@ function collecterNotes() {
             return null;
         }
 
+        // Validation 0-20
+        for (const note of devoirs) {
+            if (note < 0 || note > 20) {
+                afficherToast(
+                    `${m} : note ${note} invalide (0–20)`,
+                    'error'
+                );
+                return null;
+            }
+        }
+
+        if (examen < 0 || examen > 20) {
+            afficherToast(
+                `${m} : examen ${examen} invalide (0–20)`,
+                'error'
+            );
+            return null;
+        }
+
         const moyDevoirs = devoirs.reduce((a, b) => a + b, 0)
                            / devoirs.length;
         const moyenne    = Math.round(
@@ -855,7 +878,7 @@ async function soumettrAjout() {
     if (!infos) return;
 
     const notes = collecterNotes();
-    if (notes === null) return; // erreur dans les notes
+    if (notes === null) return;
 
     const donnees = { ...infos, notes };
 
@@ -909,6 +932,13 @@ function attacherEvenements() {
         .addEventListener('change', e => {
             etat.source = e.target.value;
             etat.page   = 1;
+            chargerDonnees();
+        });
+
+    document.getElementById('filtreValidite')
+        .addEventListener('change', e => {
+            etat.validite = e.target.value;
+            etat.page     = 1;
             chargerDonnees();
         });
 

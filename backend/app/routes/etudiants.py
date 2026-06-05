@@ -11,18 +11,31 @@ router = APIRouter()
 
 @router.get("/etudiants")
 def liste_etudiants(
-    page:      int  = Query(default=1,  ge=1),
-    limite: int = Query(default=5, ge=1, le=500),
+    page:      int  = Query(default=1,   ge=1),
+    limite:    int  = Query(default=5,   ge=1, le=500),
     recherche: str  = Query(default=None),
     classe:    str  = Query(default=None),
-    archive:   bool = Query(default=False)
+    archive:   bool = Query(default=False),
+    valide:    str  = Query(default=None)
 ):
+    """
+    Retourne une liste paginée d'étudiants.
+    Paramètres :
+    - page      : numéro de page (défaut 1)
+    - limite    : lignes par page (défaut 5)
+    - recherche : filtre par nom, prénom, numéro ou code
+    - classe    : filtre par classe
+    - archive   : afficher les archivés (défaut False)
+    - valide    : 'true' ou 'false' pour filtrer par validité
+    """
     etudiants = etudiant_service.lister_etudiants(
         page=page, limite=limite,
-        recherche=recherche, classe=classe, archive=archive
+        recherche=recherche, classe=classe,
+        archive=archive, valide=valide
     )
     total = etudiant_service.compter_etudiants(
-        recherche=recherche, classe=classe, archive=archive
+        recherche=recherche, classe=classe,
+        archive=archive, valide=valide
     )
     return {
         "data": etudiants,
@@ -46,10 +59,6 @@ def detail_etudiant(id_etudiant: int):
 
 @router.post("/etudiants", status_code=201)
 def creer_etudiant(data: EtudiantCreer):
-    """
-    Crée un nouvel étudiant dans PostgreSQL.
-    status_code=201 signifie "Created" — convention REST.
-    """
     try:
         etudiant = etudiant_service.creer_etudiant(data)
         return etudiant
@@ -59,10 +68,6 @@ def creer_etudiant(data: EtudiantCreer):
 
 @router.put("/etudiants/{id_etudiant}")
 def modifier_etudiant(id_etudiant: int, data: EtudiantModifier):
-    """
-    Modifie un étudiant existant.
-    Seuls les champs envoyés sont mis à jour.
-    """
     try:
         etudiant = etudiant_service.modifier_etudiant(
             id_etudiant, data
@@ -77,12 +82,7 @@ def modifier_etudiant(id_etudiant: int, data: EtudiantModifier):
 
 @router.post("/etudiants/{id_etudiant}/archive")
 def archiver_etudiant(id_etudiant: int):
-    """
-    Archive logiquement un étudiant.
-    """
-    resultat, statut = etudiant_service.archiver_etudiant(
-        id_etudiant
-    )
+    resultat, statut = etudiant_service.archiver_etudiant(id_etudiant)
     if statut == "introuvable":
         raise HTTPException(status_code=404,
                             detail="Étudiant introuvable")
@@ -94,12 +94,7 @@ def archiver_etudiant(id_etudiant: int):
 
 @router.post("/etudiants/{id_etudiant}/restore")
 def restaurer_etudiant(id_etudiant: int):
-    """
-    Restaure un étudiant archivé.
-    """
-    resultat, statut = etudiant_service.restaurer_etudiant(
-        id_etudiant
-    )
+    resultat, statut = etudiant_service.restaurer_etudiant(id_etudiant)
     if statut == "introuvable":
         raise HTTPException(status_code=404,
                             detail="Étudiant introuvable")

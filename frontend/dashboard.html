@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEV DATA P8 — Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<nav>
+    <span class="logo">📚 DEV DATA P8</span>
+    <div>
+        <a href="/">Étudiants</a>
+        <a href="/dashboard">Dashboard</a>
+    </div>
+</nav>
+
+<div class="container">
+
+    <h1 style="margin-bottom:24px; font-size:22px;
+               color:#1e293b;">
+        📊 Tableau de bord
+    </h1>
+
+    <!-- KPI -->
+    <div id="kpi-container"
+         style="display:grid;
+                grid-template-columns:repeat(auto-fit,
+                    minmax(160px, 1fr));
+                gap:16px; margin-bottom:28px;">
+        <div class="loading">
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <!-- Graphiques ligne 1 -->
+    <div style="display:grid;
+                grid-template-columns:1fr 1fr;
+                gap:20px; margin-bottom:20px;">
+
+        <div class="card">
+            <h3 style="margin-bottom:16px; font-size:15px;
+                       color:#475569;">
+                📚 Étudiants par classe
+            </h3>
+            <canvas id="chartClasses"></canvas>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-bottom:16px; font-size:15px;
+                       color:#475569;">
+                🗂️ Répartition par source
+            </h3>
+            <canvas id="chartSources"></canvas>
+        </div>
+
+    </div>
+
+    <!-- Graphiques ligne 2 -->
+    <div style="display:grid;
+                grid-template-columns:1fr 1fr;
+                gap:20px; margin-bottom:20px;">
+
+        <div class="card">
+            <h3 style="margin-bottom:16px; font-size:15px;
+                       color:#475569;">
+                ✅ Valides vs Invalides
+            </h3>
+            <canvas id="chartValidite"></canvas>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-bottom:16px; font-size:15px;
+                       color:#475569;">
+                📈 Moyenne générale par classe
+            </h3>
+            <canvas id="chartMoyennes"></canvas>
+        </div>
+
+    </div>
+
+    <!-- Top 10 -->
+    <div class="card">
+        <h3 style="margin-bottom:16px; font-size:15px;
+                   color:#475569;">
+            🏆 Top 10 des meilleures moyennes
+        </h3>
+        <canvas id="chartTop10" height="80"></canvas>
+    </div>
+
+</div>
+
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

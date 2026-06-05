@@ -5,7 +5,8 @@
 from app.database.connection import get_connection
 
 
-def compter_etudiants(recherche=None, classe=None, archive=False):
+def compter_etudiants(recherche=None, classe=None,
+                       archive=False, valide=None):
     """
     Compte le nombre total d'étudiants selon les filtres.
     """
@@ -28,6 +29,10 @@ def compter_etudiants(recherche=None, classe=None, archive=False):
             conditions.append("c.libelle_classe = %s")
             valeurs.append(classe)
 
+        if valide is not None:
+            conditions.append("e.est_valide = %s")
+            valeurs.append(valide == 'true')
+
         where = " AND ".join(conditions)
 
         cursor.execute(f"""
@@ -45,7 +50,7 @@ def compter_etudiants(recherche=None, classe=None, archive=False):
 
 
 def lister_etudiants(page=1, limite=5, recherche=None,
-                     classe=None, archive=False):
+                     classe=None, archive=False, valide=None):
     """
     Retourne une page d'étudiants avec leur moyenne générale.
     """
@@ -69,6 +74,10 @@ def lister_etudiants(page=1, limite=5, recherche=None,
         if classe:
             conditions.append("c.libelle_classe = %s")
             valeurs.append(classe)
+
+        if valide is not None:
+            conditions.append("e.est_valide = %s")
+            valeurs.append(valide == 'true')
 
         where = " AND ".join(conditions)
 
@@ -196,7 +205,6 @@ def creer_etudiant(data):
     cursor = conn.cursor()
 
     try:
-        # Vérifier que la classe existe
         cursor.execute(
             "SELECT id_classe FROM classe WHERE libelle_classe = %s",
             (data.classe,)
@@ -206,7 +214,6 @@ def creer_etudiant(data):
             raise ValueError(f"Classe '{data.classe}' inexistante")
         id_classe = resultat[0]
 
-        # Vérifier doublon numéro
         cursor.execute(
             "SELECT id_etudiant FROM etudiant WHERE numero = %s",
             (data.numero,)
@@ -214,7 +221,6 @@ def creer_etudiant(data):
         if cursor.fetchone() is not None:
             raise ValueError(f"Le numéro '{data.numero}' existe déjà")
 
-        # Insérer l'étudiant
         cursor.execute("""
             INSERT INTO etudiant
                 (code, numero, nom, prenom, date_naissance,
@@ -228,9 +234,7 @@ def creer_etudiant(data):
         ))
         id_etudiant = cursor.fetchone()[0]
 
-        # Insérer les notes si présentes
         for matiere_nom, note in data.notes.items():
-
             cursor.execute(
                 "SELECT id_matiere FROM matiere "
                 "WHERE libelle_matiere = %s",
