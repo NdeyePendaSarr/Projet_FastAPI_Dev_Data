@@ -9,7 +9,10 @@
 <body>
 
 <nav>
-    <span class="logo">◈ DEV DATA P8</span>
+    <div class="logo">
+        <span>D</span>
+        DEV DATA P8
+    </div>
     <div class="nav-links">
         <a href="/" class="active">Étudiants</a>
         <a href="/dashboard">Dashboard</a>
@@ -19,8 +22,10 @@
 <div class="container">
 
     <div class="page-header">
-        <h1>Gestion des étudiants</h1>
-        <p>Consultation, modification et suivi des données académiques</p>
+        <div class="page-header-left">
+            <h1>Gestion des étudiants</h1>
+            <p>Consultation, modification et suivi des données académiques</p>
+        </div>
     </div>
 
     <div class="card">
@@ -66,7 +71,7 @@
                 class="btn btn-success"
                 onclick="importerSelection()"
                 disabled>
-                ↑ Importer
+                ↑ Importer sélection
             </button>
 
         </div>
@@ -84,7 +89,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:40px">☑</th>
+                            <th style="width:44px; padding-left:20px">☑</th>
                             <th>Code</th>
                             <th>Numéro</th>
                             <th>Nom</th>
@@ -100,7 +105,8 @@
                 </table>
             </div>
 
-            <div class="pagination" style="padding:12px 20px;">
+            <div class="pagination"
+                 style="padding:12px 22px; border-top:1px solid var(--bg);">
                 <span id="paginationInfo" class="pagination-info"></span>
                 <div id="pagination" class="pagination-controls"></div>
             </div>
