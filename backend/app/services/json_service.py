@@ -297,3 +297,46 @@ def importer_selection(numeros: list):
         "introuvables": introuvables,
         "total_importes": len(importes)
     }
+def lire_json_pagine(page=1, limite=5):
+    """
+    Retourne les étudiants du JSON qui ne sont
+    pas encore dans PostgreSQL, avec pagination.
+    """
+    from app.database.connection import get_connection
+
+    tous = charger_json()
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Récupérer tous les numéros déjà en base
+        cursor.execute("SELECT numero FROM etudiant")
+        numeros_en_base = {row[0] for row in cursor.fetchall()}
+
+        # Garder uniquement ceux qui ne sont pas en base
+        non_importes = [
+            e for e in tous
+            if e['numero'] not in numeros_en_base
+        ]
+
+        total = len(non_importes)
+        offset = (page - 1) * limite
+        page_data = non_importes[offset:offset + limite]
+
+        # Ajouter le champ origine
+        for e in page_data:
+            e['origine'] = 'JSON'
+
+        return {
+            "data": page_data,
+            "pagination": {
+                "page":        page,
+                "limite":      limite,
+                "total":       total,
+                "total_pages": -(-total // limite) if total > 0 else 0
+            }
+        }
+
+    finally:
+        cursor.close()
+        conn.close()

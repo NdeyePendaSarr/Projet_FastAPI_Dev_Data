@@ -4,9 +4,11 @@
 # ============================================
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import etudiants, stats
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.routes import etudiants, stats, import_json
-# Création de l'application FastAPI
+import os
+
 app = FastAPI(
     title="DEV DATA P8 - API",
     description="API de gestion des étudiants",
@@ -14,8 +16,6 @@ app = FastAPI(
 )
 
 # Configuration CORS
-# Permet au frontend (HTML/JS) d'appeler l'API
-# même s'ils ne sont pas sur le même port
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -24,17 +24,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Enregistrement des routes
-app.include_router(etudiants.router, prefix="/api/v1")
-app.include_router(stats.router,     prefix="/api/v1")
+# Servir les fichiers statiques du frontend
+FRONTEND_DIR = os.path.join(
+    os.path.dirname(__file__), '..', '..', 'frontend'
+)
+app.mount(
+    "/static",
+    StaticFiles(directory=FRONTEND_DIR),
+    name="static"
+)
+
+# Enregistrement des routes API
+app.include_router(etudiants.router,   prefix="/api/v1")
+app.include_router(stats.router,       prefix="/api/v1")
 app.include_router(import_json.router, prefix="/api/v1")
+
 
 @app.get("/api/v1/health")
 def health_check():
-    """
-    Route de vérification — confirme que le serveur
-    et la base de données sont opérationnels.
-    """
     try:
         from app.database.connection import get_connection
         conn = get_connection()
@@ -44,7 +51,18 @@ def health_check():
             "message": "Serveur et base de données opérationnels"
         }
     except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/")
+def servir_index():
+    """Sert la page principale"""
+    chemin = os.path.join(FRONTEND_DIR, 'index.html')
+    return FileResponse(chemin)
+
+
+@app.get("/dashboard")
+def servir_dashboard():
+    """Sert la page dashboard"""
+    chemin = os.path.join(FRONTEND_DIR, 'dashboard.html')
+    return FileResponse(chemin)
